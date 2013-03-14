@@ -105,7 +105,7 @@
 
 
 # named_ip_addr / CONF_NAMED_IP_ADDR
-#   Default: current IP if installing named, otherwise broker_ip_addr
+#   Default: static IP if installing named, otherwise broker_ip_addr
 #   This is used by every host to configure its primary nameserver.
 #CONF_NAMED_IP_ADDR=10.10.10.10
 
@@ -116,13 +116,13 @@
 #CONF_BIND_KEY=""
 
 # broker_ip_addr / CONF_BROKER_IP_ADDR
-#   Default: the current IP (at install)
+#   Default: the static IP (at install)
 #   This is used for the node to record its broker. Also is the default
 #   for the nameserver IP if none is given.
 #CONF_BROKER_IP_ADDR=10.10.10.10
 
 # node_ip_addr / CONF_NODE_IP_ADDR
-#   Default: the current IP (at install)
+#   Default: the static IP (at install)
 #   This is used for the node to give a public IP, if different from the
 #   one on its NIC.
 #CONF_NODE_IP_ADDR=10.10.10.10
@@ -1177,8 +1177,8 @@ EOF
   # Add A records any other components that are being installed locally.
   broker && echo "${broker_hostname%.${domain}}			A	${broker_ip_addr}" >> $nsdb
   node && echo "${node_hostname%.${domain}}			A	${node_ip_addr}${nl}" >> $nsdb
-  activemq && echo "${activemq_hostname%.${domain}}			A	${cur_ip_addr}${nl}" >> $nsdb
-  datastore && echo "${datastore_hostname%.${domain}}			A	${cur_ip_addr}${nl}" >> $nsdb
+  activemq && echo "${activemq_hostname%.${domain}}			A	${static_ip_addr}${nl}" >> $nsdb
+  datastore && echo "${datastore_hostname%.${domain}}			A	${static_ip_addr}${nl}" >> $nsdb
   echo >> $nsdb
 
   # Install the key for the OpenShift Enterprise domain.
@@ -1618,6 +1618,12 @@ is_false()
 # We also set the $cur_ip_addr variable to the IP address of the host
 # running this script, based on the output of the `ip addr show` command
 #
+# We also set the $static_ip_addr variable to allow the intended (permanent) ip 
+# of a server to be set as $cur_ip_addr may be temporary in the case of dhcp-based builds
+# static_ip_addr would likely be passed in on init line by the user
+# Default is $cur_ip_addr value to allow orginal $cur_ip_addr defaults to remain
+# if $static_ip_addr isn't specified (ie we assume THIS server's ip as default)
+#
 # In addition, the $nameservers variable will be set to
 # a semicolon-delimited list of nameservers, suitable for use in
 # named.conf, based on the existing contents of /etc/resolv.conf, and
@@ -1629,6 +1635,7 @@ is_false()
 #   bind_key
 #   broker_hostname
 #   cur_ip_addr
+#   static_ip_addr
 #   domain
 #   datastore_hostname
 #   named_hostname
@@ -1653,6 +1660,7 @@ is_false()
 #   CONF_INSTALL_COMPONENTS
 #   CONF_NAMED_HOSTNAME
 #   CONF_NAMED_IP_ADDR
+#		CONF_STATIC_IP_ADDR
 #   CONF_NODE_HOSTNAME
 #   CONF_NODE_IP_ADDR
 #   CONF_REPOS_BASE
@@ -1731,20 +1739,23 @@ set_defaults()
   # Grab the IP address set during installation.
   cur_ip_addr="$(/sbin/ip addr show dev eth0 | awk '/inet / { split($2,a,"/"); print a[1]; }')"
 
-  # Unless otherwise specified, the broker is assumed to be the current
-  # host.
-  broker_ip_addr="${CONF_BROKER_IP_ADDR:-$cur_ip_addr}"
+  # if we build using dhcp set static_ip_addr to the FINAL addr of the server; cur_ip_addr is temporary (build) 
+  static_ip_addr="${CONF_STATIC_IP_ADDR:-$cur_ip_addr}"
 
-  # Unless otherwise specified, the node is assumed to be the current
+  # Unless otherwise specified, the broker is assumed to be the static
   # host.
-  node_ip_addr="${CONF_NODE_IP_ADDR:-$cur_ip_addr}"
+  broker_ip_addr="${CONF_BROKER_IP_ADDR:-$static_ip_addr}"
+
+  # Unless otherwise specified, the node is assumed to be the static
+  # host.
+  node_ip_addr="${CONF_NODE_IP_ADDR:-$static_ip_addr}"
 
   # Unless otherwise specified, the named service, data store, and
-  # ActiveMQ service are assumed to be the current host if we are
+  # ActiveMQ service are assumed to be the static host ip if we are
   # installing the component now or the broker host otherwise.
   if named
   then
-    named_ip_addr="${CONF_NAMED_IP_ADDR:-$cur_ip_addr}"
+    named_ip_addr="${CONF_NAMED_IP_ADDR:-$static_ip_addr}"
   else
     named_ip_addr="${CONF_NAMED_IP_ADDR:-$broker_ip_addr}"
   fi
