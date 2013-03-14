@@ -5,6 +5,304 @@ CONF_DOMAIN="${CONF_PREFIX}.cloudydemo.com"
 CONF_APPS_DOMAIN="apps.${CONF_PREFIX}.cloudydemo.com"
 
 CONF_NO_NTP=true
+# be used either as a RHEL6 kickstart script, or the %post section may 
+# be extracted and run directly to install on top of an installed RHEL6
+# image. When running the %post outside kickstart, a reboot is required
+# afterward.
+
+# SPECIFYING PARAMETERS
+#
+# If you supply no parameters, all components are installed on one host
+# with default configuration, which should give you a running demo.
+#
+# For a kickstart, you can supply further kernel parameters (in addition
+# to the ks=location itself).
+# e.g. virt-install ... -x "ks=http://.../openshift.ks domain=example.com"
+#
+# As a bash script, just add the parameters as bash variables at the top
+# of the script (or environment variables). Kickstart parameters are
+# mapped to uppercase bash variables prepended with CONF_ so for 
+# example, "domain=example.com" as a kickstart parameter would be
+# "CONF_DOMAIN=example.com" for the script.
+
+# PARAMETER DESCRIPTIONS
+
+# install_components / CONF_INSTALL_COMPONENTS
+#   Comma-separated selections from the following:
+#     broker - installs the broker webapp and tools
+#     named - installs a BIND DNS server
+#     activemq - installs the messaging bus
+#     datastore - installs the MongoDB datastore
+#     node - installs node functionality
+#   Default: all.
+#   Only the specified components are installed and configured.
+#   e.g. install_components=broker,datastore only installs the broker
+#   and DB, and assumes you have use other hosts for messaging and DNS.
+#
+# Example kickstart parameter:
+#  install_components="node,broker,named,activemq,datastore"
+# Example script variable:
+#  CONF_INSTALL_COMPONENTS="node,broker,named,activemq,datastore"
+#CONF_INSTALL_COMPONENTS="node"
+
+# install_method / CONF_INSTALL_METHOD
+#   Choice from the following ways to provide packages:
+#     yum - set up yum repos manually
+#       repos_base / CONF_REPOS_BASE -- see below
+#       rhel_repo / CONF_RHEL_REPO -- see below
+#       jboss_repo_base / CONF_JBOSS_REPO_BASE -- see below
+#     sm - use subscription-manager (not yet implemented)
+#       sm_reg_name / CONF_SM_REG_NAME
+#       sm_reg_pass / CONF_SM_REG_PASS
+#       sm_reg_pool / CONF_SM_REG_POOL
+#     rhn - use rhn-register
+#       rhn_reg_name / CONF_RHN_REG_NAME
+#       rhn_reg_pass / CONF_RHN_REG_PASS
+#       rhn_reg_actkey / CONF_RHN_REG_ACTKEY
+#     none - install source is already set up when the script executes
+#   Default: none
+#CONF_INSTALL_METHOD="yum"
+
+# repos_base / CONF_REPOS_BASE
+#   Default: https://mirror.openshift.com/pub/origin-server/nightly/enterprise/<latest>
+#   The base URL for the OpenShift repositories used for the "yum" 
+#   install method - the part before Infrastructure/Node/etc.
+#CONF_REPOS_BASE="https://mirror.openshift.com/pub/origin-server/nightly/enterprise/<latest>"
+
+# rhel_repo / CONF_RHEL_REPO
+#   The URL for a RHEL 6 yum repository used with the "yum" install method.
+#   Should end in /6Server/x86_64/os/
+
+# jboss_repo_base / CONF_JBOSS_REPO_BASE
+#   The base URL for the JBoss repositories used with the "yum" 
+#   install method - the part before jbeap/jbews - ends in /6/6Server/x86_64
+
+# optional_repo / CONF_OPTIONAL_REPO
+#   Enable rhel-x86_64-server-optional-6 repo.
+#   Default: no
+#CONF_OPTIONAL_REPO=1
+
+# domain / CONF_DOMAIN
+#   Default: example.com
+#   The network domain under which apps and hosts will be placed.
+#CONF_DOMAIN="example.com"
+
+# broker_hostname / CONF_BROKER_HOSTNAME
+# node_hostname / CONF_NODE_HOSTNAME
+# named_hostname / CONF_NAMED_HOSTNAME
+# activemq_hostname / CONF_ACTIVEMQ_HOSTNAME
+# datastore_hostname / CONF_DATASTORE_HOSTNAME
+#   Default: the root plus the domain, e.g. broker.example.com - except
+#   named=ns1.example.com 
+#   These supply the FQDN of the hosts containing these components. Used
+#   for configuring the host's name at install, and also for configuring
+#   the broker application to reach the services needed.
+#
+#   IMPORTANT NOTE: if installing a nameserver, the script will create
+#   DNS entries for the hostnames of the other components being 
+#   installed on this host as well. If you are using a nameserver set
+#   up separately, you are responsible for all necessary DNS entries.
+#CONF_BROKER_HOSTNAME="broker.example.com"
+#CONF_NODE_HOSTNAME="node.example.com"
+#CONF_NAMED_HOSTNAME="ns1.example.com"
+#CONF_ACTIVEMQ_HOSTNAME="activemq.example.com"
+#CONF_DATASTORE_HOSTNAME="mongodb.example.com"
+
+
+# named_ip_addr / CONF_NAMED_IP_ADDR
+#   Default: static IP if installing named, otherwise broker_ip_addr
+#   This is used by every host to configure its primary nameserver.
+#CONF_NAMED_IP_ADDR=10.10.10.10
+
+# bind_key / CONF_BIND_KEY
+#   When the nameserver is remote, use this to specify the HMAC-MD5 key
+#   for updates. This is the "Key:" field from the .private key file
+#   generated by dnssec-keygen.
+#CONF_BIND_KEY=""
+
+# broker_ip_addr / CONF_BROKER_IP_ADDR
+#   Default: the static IP (at install)
+#   This is used for the node to record its broker. Also is the default
+#   for the nameserver IP if none is given.
+#CONF_BROKER_IP_ADDR=10.10.10.10
+
+# node_ip_addr / CONF_NODE_IP_ADDR
+#   Default: the static IP (at install)
+#   This is used for the node to give a public IP, if different from the
+#   one on its NIC.
+#CONF_NODE_IP_ADDR=10.10.10.10
+
+# Passwords used to secure various services. You are advised to specify
+# only alphanumeric values in this script as others may cause syntax
+# errors depending on context. If non-alphanumeric values are required,
+# update them separately after installation.
+#
+# activemq_admin_password / CONF_ACTIVEMQ_ADMIN_PASSWORD
+#   Default: randomized
+#   This is the admin password for the ActiveMQ admin console, which is
+#   not needed by OpenShift but might be useful in troubleshooting.
+#CONF_ACTIVEMQ_ADMIN_PASSWORD="ChangeMe"
+
+
+# mcollective_user / CONF_MCOLLECTIVE_USER
+# mcollective_password / CONF_MCOLLECTIVE_PASSWORD
+#   Default: mcollective/marionette
+#   This is the user and password shared between broker and node for
+#   communicating over the mcollective topic channels in ActiveMQ. Must
+#   be the same on all broker and node hosts.
+#CONF_MCOLLECTIVE_USER="mcollective"
+#CONF_MCOLLECTIVE_PASSWORD="mcollective"
+
+# mongodb_admin_user / CONF_MONGODB_ADMIN_USER
+# mongodb_admin_password / CONF_MONGODB_ADMIN_PASSWORD
+#   Default: admin:mongopass
+#   These are the username and password of the administrative user that
+#   will be created in the MongoDB datastore. These credentials are not
+#   used by in this script or by OpenShift, but an administrative user
+#   must be added to MongoDB in order for it to enforce authentication.
+#   Note: The administrative user will not be created if
+#   CONF_NO_DATASTORE_AUTH_FOR_LOCALHOST is enabled.
+#CONF_MONGODB_ADMIN_USER="admin"
+#CONF_MONGODB_ADMIN_PASSWORD="mongopass"
+
+# mongodb_broker_user / CONF_MONGODB_BROKER_USER
+# mongodb_broker_password / CONF_MONGODB_BROKER_PASSWORD
+#   Default: openshift:mongopass
+#   These are the username and password of the normal user that will be
+#   created for the broker to connect to the MongoDB datastore. The
+#   broker application's MongoDB plugin is also configured with these
+#   values.
+#CONF_MONGODB_BROKER_USER="openshift"
+#CONF_MONGODB_BROKER_PASSWORD="mongopass"
+
+# mongodb_name / CONF_MONGODB_NAME
+#   Default: openshift_broker
+#   This is the name of the database in MongoDB in which the broker will
+#   store data.
+#CONF_MONGODB_NAME="openshift_broker"
+
+# openshift_user1 / CONF_OPENSHIFT_USER1
+# openshift_password1 / CONF_OPENSHIFT_PASSWORD1
+#   Default: demo/changeme
+#   This user and password are entered in the /etc/openshift/htpasswd
+#   file as a demo/test user. You will likely want to remove it after
+#   installation (or just use a different auth method).
+#CONF_OPENSHIFT_USER1="demo"
+#CONF_OPENSHIFT_PASSWORD1="changeme"
+
+# IMPORTANT NOTES - DEPENDENCIES
+#
+# In order for the %post section to succeed, it must have a way of
+# installing from RHEL 6. The post section cannot access the method that
+# was used in the base install. So, you must modify this script, either
+# to subscribe to RHEL during the base install, or to ensure that the
+# configure_rhel_repo function below subscribes to RHEL or configures
+# RHEL yum repos.
+#
+# The JBoss cartridges similarly require packages from the JBoss
+# entitlements, so you must subscribe to the corresponding channels
+# during the base install or modify the configure_jbossews_repo
+# or configure_jbosseap_repo functions to do so.
+#
+# The OpenShift repository steps below refer to public beta yum
+# repositories. For a supported production product, comment these out
+# and use your OpenShift Enterprise subscription instead.
+#
+# DO NOT install with third-party (non-RHEL) repos enabled (e.g. EPEL).
+# You may install different package versions than OpenShift expects and
+# be in for a long troubleshooting session. Also avoid pre-installing
+# third-party software like Puppet for the same reason.
+#
+# OTHER IMPORTANT NOTES
+#
+# You will almost certainly want to change the root password or
+# authorized keys (or both) that are specified in the script, and/or set
+# up another user/group with sudo access so that you can access the
+# system after installation.
+#
+# If you install a broker, the rhc client is installed as well, for
+# convenient local testing. Also, a test OpenShift user "demo" with
+# password "changeme" is created.
+#
+# If you want to use the broker from a client outside the installation,
+# then of course that client must be using a DNS server that knows
+# about (or is) the DNS server for the installation. Otherwise you will
+# have DNS failures when creating the app and be unable to reach it in a
+# browser.
+#
+
+# MANUAL TASKS
+#
+# This script attempts to automate as many tasks as it reasonably can.
+# Unfortunately, it is constrained to setting up only a single host at a
+# time. In an assumed multi-host setup, you will need to do the 
+# following after the script has completed.
+#
+# 1. Set up DNS entries for hosts
+#    If you installed BIND with the script, then any other components
+#    installed with the script on the same host received DNS entries.
+#    Other hosts must all be defined manually, including at least your
+#    node hosts. oo-register-dns may prove useful for this.
+#
+# 2. Copy public rsync key to enable moving gears
+#    The broker rsync public key needs to go on nodes, but there is no
+#    good way to script that generically. Nodes should not have
+#    password-less access to brokers to copy the .pub key, so this must
+#    be performed manually on each node host:
+#       # scp root@broker:/etc/openshift/rsync_id_rsa.pub /root/.ssh/
+#    (above step will ask for the root password of the broker machine)
+#       # cat /root/.ssh/rsync_id_rsa.pub >> /root/.ssh/authorized_keys
+#       # rm /root/.ssh/rsync_id_rsa.pub
+#    If you skip this, each gear move will require typing root passwords
+#    for each of the
+# node hosts involved.
+#
+# 3. Copy ssh host keys between the node hosts
+#    All node hosts should identify as the same host, so that when gears
+#    are moved between hosts, ssh and git don't give developers spurious
+#    warnings about the host keys changing. So, copy /etc/ssh/ssh_* from
+#    one node host to all the rest (or, if using the same image for all
+#    hosts, just keep the keys from the image).
+
+
+#Begin Kickstart Script
+install
+text
+skipx
+
+# NB: Be sure to change the password before running this script.
+rootpw  --iscrypted $6$QgevUVWY7.dTjKz6$jugejKU4YTngbFpfNlqrPsiE4sLJSj/ahcfqK8fE5lO0jxDhvdg59Qjk9Qn3vNPAUTWXOp9mchQDy6EV9.XBW1
+
+lang en_US.UTF-8
+keyboard us
+timezone --utc America/New_York
+
+services --enabled=ypbind,ntpd,network,logwatch
+network --onboot yes --device eth0
+firewall --service=ssh
+authconfig --enableshadow --passalgo=sha512
+selinux --enforcing
+
+bootloader --location=mbr --driveorder=vda --append=" rhgb crashkernel=auto quiet console=ttyS0"
+
+clearpart --all --initlabel
+firstboot --disable
+reboot
+
+part /boot --fstype=ext4 --size=500
+part pv.253002 --grow --size=1
+volgroup vg_vm1 --pesize=4096 pv.253002
+logvol / --fstype=ext4 --name=lv_root --vgname=vg_vm1 --grow --size=1024 --maxsize=51200
+logvol swap --name=lv_swap --vgname=vg_vm1 --grow --size=2016 --maxsize=4032
+
+%packages
+@core
+@server-policy
+ntp
+git
+
+%post --log=/root/anaconda-post.log
+
 # During a kickstart you can tail the log file showing %post execution
 # by using the following command:
 #    tailf /mnt/sysimage/root/anaconda-post.log
@@ -56,8 +354,7 @@ configure_rhel_repo()
 name=RHEL 6 base OS
 baseurl=${CONF_RHEL_REPO}
 enabled=1
-gpgcheck=0
-sslverify=false
+gpgcheck=0nsslverify=false
 sslverify=false
 
 YUM
@@ -71,8 +368,7 @@ configure_client_tools_repo()
 name=OpenShift Client
 baseurl=${CONF_REPOS_BASE}/Client/x86_64/os/
 enabled=1
-gpgcheck=0
-sslverify=false
+gpgcheck=0nsslverify=false
 sslverify=false
 
 YUM
@@ -86,8 +382,7 @@ configure_broker_repo()
 name=OpenShift Infrastructure
 baseurl=${CONF_REPOS_BASE}/Infrastructure/x86_64/os/
 enabled=1
-gpgcheck=0
-sslverify=false
+gpgcheck=0nsslverify=false
 sslverify=false
 
 YUM
@@ -101,8 +396,7 @@ configure_node_repo()
 name=OpenShift Node
 baseurl=${CONF_REPOS_BASE}/Node/x86_64/os/
 enabled=1
-gpgcheck=0
-sslverify=false
+gpgcheck=0nsslverify=false
 sslverify=false
 
 YUM
@@ -116,8 +410,7 @@ configure_jbosseap_cartridge_repo()
 name=OpenShift JBossEAP
 baseurl=${CONF_REPOS_BASE}/JBoss_EAP6_Cartridge/x86_64/os/
 enabled=1
-gpgcheck=0
-sslverify=false
+gpgcheck=0nsslverify=false
 sslverify=false
 
 YUM
@@ -135,8 +428,7 @@ configure_jbosseap_repo()
 name=jbosseap
 baseurl=${CONF_JBOSS_REPO_BASE}/jbeap/6/os/
 enabled=1
-gpgcheck=0
-sslverify=false
+gpgcheck=0nsslverify=false
 
 YUM
 
@@ -155,8 +447,7 @@ configure_jbossews_repo()
 name=jbossews
 baseurl=${CONF_JBOSS_REPO_BASE}/jbews/1/os/
 enabled=1
-gpgcheck=0
-sslverify=false
+gpgcheck=0nsslverify=false
 
 YUM
 
@@ -940,8 +1231,8 @@ EOF
   # Add A records any other components that are being installed locally.
   broker && echo "${broker_hostname%.${domain}}			A	${broker_ip_addr}" >> $nsdb
   node && echo "${node_hostname%.${domain}}			A	${node_ip_addr}${nl}" >> $nsdb
-  activemq && echo "${activemq_hostname%.${domain}}			A	${cur_ip_addr}${nl}" >> $nsdb
-  datastore && echo "${datastore_hostname%.${domain}}			A	${cur_ip_addr}${nl}" >> $nsdb
+  activemq && echo "${activemq_hostname%.${domain}}			A	${static_ip_addr}${nl}" >> $nsdb
+  datastore && echo "${datastore_hostname%.${domain}}			A	${static_ip_addr}${nl}" >> $nsdb
   echo >> $nsdb
 
   # Install the key for the OpenShift Enterprise domain.
@@ -1381,6 +1672,12 @@ is_false()
 # We also set the $cur_ip_addr variable to the IP address of the host
 # running this script, based on the output of the `ip addr show` command
 #
+# We also set the $static_ip_addr variable to allow the intended (permanent) ip 
+# of a server to be set as $cur_ip_addr may be temporary in the case of dhcp-based builds
+# static_ip_addr would likely be passed in on init line by the user
+# Default is $cur_ip_addr value to allow orginal $cur_ip_addr defaults to remain
+# if $static_ip_addr isn't specified (ie we assume THIS server's ip as default)
+#
 # In addition, the $nameservers variable will be set to
 # a semicolon-delimited list of nameservers, suitable for use in
 # named.conf, based on the existing contents of /etc/resolv.conf, and
@@ -1392,6 +1689,7 @@ is_false()
 #   bind_key
 #   broker_hostname
 #   cur_ip_addr
+#   static_ip_addr
 #   domain
 #   datastore_hostname
 #   named_hostname
@@ -1416,6 +1714,7 @@ is_false()
 #   CONF_INSTALL_COMPONENTS
 #   CONF_NAMED_HOSTNAME
 #   CONF_NAMED_IP_ADDR
+#		CONF_STATIC_IP_ADDR
 #   CONF_NODE_HOSTNAME
 #   CONF_NODE_IP_ADDR
 #   CONF_REPOS_BASE
@@ -1494,20 +1793,23 @@ set_defaults()
   # Grab the IP address set during installation.
   cur_ip_addr="$(/sbin/ip addr show dev eth0 | awk '/inet / { split($2,a,"/"); print a[1]; }')"
 
-  # Unless otherwise specified, the broker is assumed to be the current
-  # host.
-  broker_ip_addr="${CONF_BROKER_IP_ADDR:-$cur_ip_addr}"
+  # if we build using dhcp set static_ip_addr to the FINAL addr of the server; cur_ip_addr is temporary (build) 
+  static_ip_addr="${CONF_STATIC_IP_ADDR:-$cur_ip_addr}"
 
-  # Unless otherwise specified, the node is assumed to be the current
+  # Unless otherwise specified, the broker is assumed to be the static
   # host.
-  node_ip_addr="${CONF_NODE_IP_ADDR:-$cur_ip_addr}"
+  broker_ip_addr="${CONF_BROKER_IP_ADDR:-$static_ip_addr}"
+
+  # Unless otherwise specified, the node is assumed to be the static
+  # host.
+  node_ip_addr="${CONF_NODE_IP_ADDR:-$static_ip_addr}"
 
   # Unless otherwise specified, the named service, data store, and
-  # ActiveMQ service are assumed to be the current host if we are
+  # ActiveMQ service are assumed to be the static host ip if we are
   # installing the component now or the broker host otherwise.
   if named
   then
-    named_ip_addr="${CONF_NAMED_IP_ADDR:-$cur_ip_addr}"
+    named_ip_addr="${CONF_NAMED_IP_ADDR:-$static_ip_addr}"
   else
     named_ip_addr="${CONF_NAMED_IP_ADDR:-$broker_ip_addr}"
   fi
